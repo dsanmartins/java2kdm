@@ -167,6 +167,10 @@ public class JavaModelExtractor {
             extractEnumFieldsAndMethods(enumDeclaration, typeModel, projectModel, qualifiedName, filePath);
         }
 
+        if (typeDeclaration instanceof AnnotationDeclaration) {
+            typeModel.setKind("annotation");
+        }
+
         return typeModel;
     }
 
@@ -410,6 +414,8 @@ public class JavaModelExtractor {
                     variable.getBegin().map(p -> p.line).orElse(null)
             );
 
+            enrichLocalVariableInitializer(localVariable, variable);
+
             methodModel.getLocalVariables().add(localVariable);
 
             projectModel.getRelationships().add(
@@ -563,7 +569,7 @@ public class JavaModelExtractor {
             BodyStatementModel model = createBaseStatement(statement, "object_creation");
             model.setValue(expression.toString());
             model.setValueKind("object_creation");
-            model.setClassName(creation.getType().asString());
+            model.setClassName(normalizeJavaTypeName(creation.getType().asString()));
             model.setValueCall(createConstructorCallModel(creation));
             return model;
         }
@@ -714,7 +720,7 @@ public class JavaModelExtractor {
     private void addExpressionMetadata(BodyStatementModel model, Expression expression) {
         expression.findFirst(ObjectCreationExpr.class).ifPresent(creation -> {
             model.setValueKind("object_creation");
-            model.setClassName(creation.getType().asString());
+            model.setClassName(normalizeJavaTypeName(creation.getType().asString()));
             model.setValueCall(createConstructorCallModel(creation));
         });
 
@@ -778,9 +784,9 @@ public class JavaModelExtractor {
     }
 
     private CallModel createConstructorCallModel(ObjectCreationExpr creation) {
-        String className = creation.getType().asString();
+        String className = normalizeJavaTypeName(creation.getType().asString());
 
-        String target = className + ".<init>(" + creation.getArguments().size() + ")";
+        String target = resolveConstructorTarget(creation, className);
 
         CallModel callModel = new CallModel(
                 className,
@@ -799,6 +805,129 @@ public class JavaModelExtractor {
         );
 
         return callModel;
+    }
+
+    private String resolveConstructorTarget(ObjectCreationExpr creation, String fallbackClassName) {
+        try {
+            String resolvedType = creation.calculateResolvedType().describe();
+            String normalizedResolvedType = normalizeJavaTypeName(resolvedType);
+
+            if (normalizedResolvedType != null && !normalizedResolvedType.isBlank()) {
+                return normalizedResolvedType + ".<init>(" + creation.getArguments().size() + ")";
+            }
+        } catch (Exception ignored) {
+            // Fall back to the syntactic type below.
+        }
+
+        return fallbackClassName + ".<init>(" + creation.getArguments().size() + ")";
+    }
+
+    private void enrichLocalVariableInitializer(
+            LocalVariableModel localVariable,
+            VariableDeclarator variable
+    ) {
+        variable.getInitializer().ifPresent(initializer -> {
+            localVariable.setAssignedValue(initializer.toString());
+            localVariable.setValueKind(classifyExpressionKind(initializer));
+            localVariable.setValueType(resolveExpressionType(initializer));
+
+            if (initializer.isObjectCreationExpr()) {
+                ObjectCreationExpr creation = initializer.asObjectCreationExpr();
+                localVariable.setAssignedType(
+                        normalizeJavaTypeName(creation.getType().asString())
+                );
+            } else {
+                localVariable.setAssignedType(localVariable.getValueType());
+            }
+
+            if (localVariable.getResolvedType() != null
+                    && localVariable.getValueType() != null
+                    && localVariable.getResolvedType().equals(localVariable.getValueType())) {
+                localVariable.setTypeResolution("declared_type_matches_value_type");
+            } else if (localVariable.getValueType() != null) {
+                localVariable.setTypeResolution("value_type_resolved");
+            } else {
+                localVariable.setTypeResolution("value_type_unresolved");
+            }
+        });
+    }
+
+    private String classifyExpressionKind(Expression expression) {
+        if (expression.isObjectCreationExpr()) {
+            return "object_creation";
+        }
+
+        if (expression.isMethodCallExpr()) {
+            return "method_call";
+        }
+
+        if (expression.isLiteralExpr()) {
+            return "literal";
+        }
+
+        if (expression.isNameExpr() || expression.isFieldAccessExpr()) {
+            return "reference";
+        }
+
+        if (expression.isBinaryExpr()) {
+            return "binary_expression";
+        }
+
+        if (expression.isUnaryExpr()) {
+            return "unary_expression";
+        }
+
+        if (expression.isConditionalExpr()) {
+            return "conditional_expression";
+        }
+
+        return "expression";
+    }
+
+    private String resolveExpressionType(Expression expression) {
+        try {
+            return normalizeJavaTypeName(expression.calculateResolvedType().describe());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String normalizeJavaTypeName(String rawTypeName) {
+        if (rawTypeName == null) {
+            return null;
+        }
+
+        String typeName = rawTypeName.trim();
+
+        if (typeName.isBlank()) {
+            return typeName;
+        }
+
+        StringBuilder normalized = new StringBuilder();
+        int genericDepth = 0;
+
+        for (int i = 0; i < typeName.length(); i++) {
+            char character = typeName.charAt(i);
+
+            if (character == '<') {
+                genericDepth++;
+                continue;
+            }
+
+            if (character == '>') {
+                genericDepth = Math.max(0, genericDepth - 1);
+                continue;
+            }
+
+            if (genericDepth == 0) {
+                normalized.append(character);
+            }
+        }
+
+        return normalized.toString()
+                .replace("[]", "[]")
+                .replace(" ", "")
+                .trim();
     }
 
     private void addMethodTypeRelationships(
