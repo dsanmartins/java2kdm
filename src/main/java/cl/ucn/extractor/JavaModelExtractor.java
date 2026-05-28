@@ -14,7 +14,7 @@ import com.github.javaparser.ast.stmt.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.*;
 
 public class JavaModelExtractor {
 
@@ -69,6 +69,8 @@ public class JavaModelExtractor {
             }
         }
 
+        enrichProjectModel(projectModel);
+
         return projectModel;
     }
 
@@ -83,6 +85,8 @@ public class JavaModelExtractor {
         typeModel.setName(typeDeclaration.getNameAsString());
         typeModel.setPackageName(packageName);
         typeModel.setFilePath(filePath);
+        typeModel.setLineStart(typeDeclaration.getBegin().map(p -> p.line).orElse(null));
+        typeModel.setLineEnd(typeDeclaration.getEnd().map(p -> p.line).orElse(null));
 
         String qualifiedName = packageName.isBlank()
                 ? typeDeclaration.getNameAsString()
@@ -192,6 +196,10 @@ public class JavaModelExtractor {
                 );
 
                 fieldModel.setResolvedType(resolvedFieldType);
+                fieldModel.setResolvedRawType(extractRawType(resolvedFieldType));
+                fieldModel.setResolvedTypeArguments(extractTypeArguments(resolvedFieldType));
+                fieldModel.setLineStart(variable.getBegin().map(p -> p.line).orElse(field.getBegin().map(p -> p.line).orElse(null)));
+                fieldModel.setLineEnd(variable.getEnd().map(p -> p.line).orElse(field.getEnd().map(p -> p.line).orElse(null)));
 
                 field.getModifiers().forEach(modifier ->
                         fieldModel.getModifiers().add(modifier.getKeyword().asString())
@@ -229,6 +237,10 @@ public class JavaModelExtractor {
             methodModel.setName(method.getNameAsString());
             methodModel.setReturnType(method.getTypeAsString());
             methodModel.setResolvedReturnType(typeResolver.resolveType(method.getType()));
+            methodModel.setResolvedRawReturnType(extractRawType(methodModel.getResolvedReturnType()));
+            methodModel.setResolvedReturnTypeArguments(extractTypeArguments(methodModel.getResolvedReturnType()));
+            methodModel.setLineStart(method.getBegin().map(p -> p.line).orElse(null));
+            methodModel.setLineEnd(method.getEnd().map(p -> p.line).orElse(null));
             methodModel.setKind("method");
 
             method.getModifiers().forEach(modifier ->
@@ -241,11 +253,7 @@ public class JavaModelExtractor {
 
             method.getParameters().forEach(parameter ->
                     methodModel.getParameters().add(
-                            new ParameterModel(
-                                    parameter.getNameAsString(),
-                                    parameter.getTypeAsString(),
-                                    typeResolver.resolveType(parameter.getType())
-                            )
+                            createParameterModel(parameter)
                     )
             );
 
@@ -275,6 +283,8 @@ public class JavaModelExtractor {
                     methodModel,
                     sourceMethod,
                     filePath,
+                    ownerQualifiedName,
+                    typeModel.getFields(),
                     projectModel
             );
 
@@ -295,6 +305,9 @@ public class JavaModelExtractor {
             constructorModel.setName(constructor.getNameAsString());
             constructorModel.setReturnType("void");
             constructorModel.setResolvedReturnType("void");
+            constructorModel.setResolvedRawReturnType("void");
+            constructorModel.setLineStart(constructor.getBegin().map(p -> p.line).orElse(null));
+            constructorModel.setLineEnd(constructor.getEnd().map(p -> p.line).orElse(null));
             constructorModel.setKind("constructor");
 
             constructor.getModifiers().forEach(modifier ->
@@ -307,11 +320,7 @@ public class JavaModelExtractor {
 
             constructor.getParameters().forEach(parameter ->
                     constructorModel.getParameters().add(
-                            new ParameterModel(
-                                    parameter.getNameAsString(),
-                                    parameter.getTypeAsString(),
-                                    typeResolver.resolveType(parameter.getType())
-                            )
+                            createParameterModel(parameter)
                     )
             );
 
@@ -342,6 +351,8 @@ public class JavaModelExtractor {
                     constructorModel,
                     qualifiedSignature,
                     filePath,
+                    ownerQualifiedName,
+                    typeModel.getFields(),
                     projectModel
             );
 
@@ -363,15 +374,15 @@ public class JavaModelExtractor {
                 methodModel.setName(method.getNameAsString());
                 methodModel.setReturnType(method.getTypeAsString());
                 methodModel.setResolvedReturnType(typeResolver.resolveType(method.getType()));
+                methodModel.setResolvedRawReturnType(extractRawType(methodModel.getResolvedReturnType()));
+                methodModel.setResolvedReturnTypeArguments(extractTypeArguments(methodModel.getResolvedReturnType()));
+                methodModel.setLineStart(method.getBegin().map(p -> p.line).orElse(null));
+                methodModel.setLineEnd(method.getEnd().map(p -> p.line).orElse(null));
                 methodModel.setKind("method");
 
                 method.getParameters().forEach(parameter ->
                         methodModel.getParameters().add(
-                                new ParameterModel(
-                                        parameter.getNameAsString(),
-                                        parameter.getTypeAsString(),
-                                        typeResolver.resolveType(parameter.getType())
-                                )
+                                createParameterModel(parameter)
                         )
                 );
 
@@ -388,7 +399,7 @@ public class JavaModelExtractor {
 
                 methodModel.setQualifiedSignature(sourceMethod);
 
-                extractCallableBody(method, methodModel, sourceMethod, filePath, projectModel);
+                extractCallableBody(method, methodModel, sourceMethod, filePath, ownerQualifiedName, typeModel.getFields(), projectModel);
 
                 typeModel.getMethods().add(methodModel);
             }
@@ -400,6 +411,8 @@ public class JavaModelExtractor {
             MethodModel methodModel,
             String qualifiedSignature,
             String filePath,
+            String ownerQualifiedName,
+            List<FieldModel> ownerFields,
             ProjectModel projectModel
     ) {
         callable.findAll(VariableDeclarator.class).forEach(variable -> {
@@ -413,6 +426,9 @@ public class JavaModelExtractor {
                     typeResolver.resolveType(variable.getType()),
                     variable.getBegin().map(p -> p.line).orElse(null)
             );
+
+            localVariable.setResolvedRawType(extractRawType(localVariable.getResolvedType()));
+            localVariable.setResolvedTypeArguments(extractTypeArguments(localVariable.getResolvedType()));
 
             enrichLocalVariableInitializer(localVariable, variable);
 
@@ -457,6 +473,10 @@ public class JavaModelExtractor {
                     methodModel.getBody().add(extractStatement(statement))
             );
         }
+
+        addObjectCreationRelationships(callable, qualifiedSignature, filePath, projectModel);
+        addThrowRelationships(callable, qualifiedSignature, filePath, projectModel);
+        addDataAccessRelationships(callable, methodModel, qualifiedSignature, ownerQualifiedName, ownerFields, filePath, projectModel);
     }
 
     private BodyStatementModel extractStatement(Statement statement) {
@@ -506,6 +526,18 @@ public class JavaModelExtractor {
 
         if (statement.isTryStmt()) {
             return extractTryStatement(statement.asTryStmt());
+        }
+
+        if (statement.isContinueStmt()) {
+            BodyStatementModel model = createBaseStatement(statement, "continue");
+            model.setValue("continue");
+            return model;
+        }
+
+        if (statement.isBreakStmt()) {
+            BodyStatementModel model = createBaseStatement(statement, "break");
+            model.setValue("break");
+            return model;
         }
 
         BodyStatementModel generic = createBaseStatement(statement, "statement");
@@ -968,6 +1000,466 @@ public class JavaModelExtractor {
                     )
             );
         }
+    }
+
+
+    private ParameterModel createParameterModel(Parameter parameter) {
+        String resolvedType = typeResolver.resolveType(parameter.getType());
+        ParameterModel model = new ParameterModel(
+                parameter.getNameAsString(),
+                parameter.getTypeAsString(),
+                resolvedType
+        );
+
+        model.setResolvedRawType(extractRawType(resolvedType));
+        model.setResolvedTypeArguments(extractTypeArguments(resolvedType));
+        model.setLineStart(parameter.getBegin().map(p -> p.line).orElse(null));
+        model.setLineEnd(parameter.getEnd().map(p -> p.line).orElse(null));
+        parameter.getAnnotations().forEach(annotation -> model.getAnnotations().add(annotation.toString()));
+        return model;
+    }
+
+    private void addObjectCreationRelationships(Node callable, String qualifiedSignature, String filePath, ProjectModel projectModel) {
+        callable.findAll(ObjectCreationExpr.class).forEach(creation -> {
+            String target = resolveExpressionType(creation);
+            if (target == null || target.isBlank()) {
+                target = normalizeJavaTypeName(creation.getType().asString());
+            }
+            addRelationshipIfAbsent(projectModel, "creates", qualifiedSignature, target, filePath, creation.getBegin().map(p -> p.line).orElse(null));
+        });
+    }
+
+    private void addThrowRelationships(Node callable, String qualifiedSignature, String filePath, ProjectModel projectModel) {
+        callable.findAll(ThrowStmt.class).forEach(throwStmt -> {
+            String target = null;
+            Optional<ObjectCreationExpr> creation = throwStmt.getExpression().findFirst(ObjectCreationExpr.class);
+            if (creation.isPresent()) {
+                target = resolveExpressionType(creation.get());
+                if (target == null || target.isBlank()) {
+                    target = normalizeJavaTypeName(creation.get().getType().asString());
+                }
+            } else {
+                target = throwStmt.getExpression().toString();
+            }
+            addRelationshipIfAbsent(projectModel, "throws", qualifiedSignature, target, filePath, throwStmt.getBegin().map(p -> p.line).orElse(null));
+        });
+    }
+
+    private void addDataAccessRelationships(
+            Node callable,
+            MethodModel methodModel,
+            String qualifiedSignature,
+            String ownerQualifiedName,
+            List<FieldModel> ownerFields,
+            String filePath,
+            ProjectModel projectModel
+    ) {
+        Set<String> fieldNames = new LinkedHashSet<>();
+        ownerFields.forEach(field -> fieldNames.add(field.getName()));
+
+        Set<String> localNames = new LinkedHashSet<>();
+        methodModel.getLocalVariables().forEach(local -> localNames.add(local.getName()));
+
+        Set<String> parameterNames = new LinkedHashSet<>();
+        methodModel.getParameters().forEach(parameter -> parameterNames.add(parameter.getName()));
+
+        callable.findAll(AssignExpr.class).forEach(assign -> {
+            String target = resolveVariableReference(assign.getTarget().toString(), qualifiedSignature, ownerQualifiedName, fieldNames, localNames, parameterNames);
+            addRelationshipIfAbsent(projectModel, "writes", qualifiedSignature, target, filePath, assign.getBegin().map(p -> p.line).orElse(null));
+        });
+
+        callable.findAll(VariableDeclarator.class).forEach(variable -> {
+            if (variable.findAncestor(FieldDeclaration.class).isPresent()) {
+                return;
+            }
+            String target = qualifiedSignature + ":local:" + variable.getNameAsString();
+            addRelationshipIfAbsent(projectModel, "writes", qualifiedSignature, target, filePath, variable.getBegin().map(p -> p.line).orElse(null));
+        });
+
+        callable.findAll(UnaryExpr.class).forEach(unary -> {
+            if (unary.getOperator() == UnaryExpr.Operator.POSTFIX_INCREMENT
+                    || unary.getOperator() == UnaryExpr.Operator.POSTFIX_DECREMENT
+                    || unary.getOperator() == UnaryExpr.Operator.PREFIX_INCREMENT
+                    || unary.getOperator() == UnaryExpr.Operator.PREFIX_DECREMENT) {
+                String target = resolveVariableReference(unary.getExpression().toString(), qualifiedSignature, ownerQualifiedName, fieldNames, localNames, parameterNames);
+                addRelationshipIfAbsent(projectModel, "writes", qualifiedSignature, target, filePath, unary.getBegin().map(p -> p.line).orElse(null));
+            }
+        });
+
+        callable.findAll(NameExpr.class).forEach(nameExpr -> {
+            if (isDeclarationName(nameExpr)) {
+                return;
+            }
+            String target = resolveVariableReference(nameExpr.getNameAsString(), qualifiedSignature, ownerQualifiedName, fieldNames, localNames, parameterNames);
+            if (!target.equals(nameExpr.getNameAsString())) {
+                addRelationshipIfAbsent(projectModel, "reads", qualifiedSignature, target, filePath, nameExpr.getBegin().map(p -> p.line).orElse(null));
+            }
+        });
+
+        callable.findAll(FieldAccessExpr.class).forEach(fieldAccess -> {
+            String target = resolveVariableReference(fieldAccess.toString(), qualifiedSignature, ownerQualifiedName, fieldNames, localNames, parameterNames);
+            addRelationshipIfAbsent(projectModel, "reads", qualifiedSignature, target, filePath, fieldAccess.getBegin().map(p -> p.line).orElse(null));
+        });
+    }
+
+    private boolean isDeclarationName(NameExpr nameExpr) {
+        return nameExpr.findAncestor(VariableDeclarator.class)
+                .map(variable -> variable.getNameAsString().equals(nameExpr.getNameAsString()))
+                .orElse(false);
+    }
+
+    private String resolveVariableReference(
+            String reference,
+            String qualifiedSignature,
+            String ownerQualifiedName,
+            Set<String> fieldNames,
+            Set<String> localNames,
+            Set<String> parameterNames
+    ) {
+        if (reference == null) {
+            return "";
+        }
+
+        String normalized = reference.trim();
+        if (normalized.startsWith("this.")) {
+            normalized = normalized.substring("this.".length());
+        }
+
+        int lastDot = normalized.lastIndexOf('.');
+        String simpleName = lastDot >= 0 ? normalized.substring(lastDot + 1) : normalized;
+
+        if (fieldNames.contains(simpleName)) {
+            return ownerQualifiedName + "." + simpleName;
+        }
+        if (localNames.contains(simpleName)) {
+            return qualifiedSignature + ":local:" + simpleName;
+        }
+        if (parameterNames.contains(simpleName)) {
+            return qualifiedSignature + ":parameter:" + simpleName;
+        }
+        return reference;
+    }
+
+    private void addRelationshipIfAbsent(ProjectModel projectModel, String type, String source, String target, String sourceFile, Integer line) {
+        if (target == null || target.isBlank()) {
+            return;
+        }
+        boolean exists = projectModel.getRelationships().stream().anyMatch(relationship ->
+                Objects.equals(relationship.getType(), type)
+                        && Objects.equals(relationship.getSource(), source)
+                        && Objects.equals(relationship.getTarget(), target)
+                        && Objects.equals(relationship.getLine(), line)
+        );
+        if (!exists) {
+            projectModel.getRelationships().add(new RelationshipModel(type, source, target, sourceFile, line));
+        }
+    }
+
+    private void enrichProjectModel(ProjectModel projectModel) {
+        Set<String> internalTypes = new LinkedHashSet<>();
+        projectModel.getElements().forEach(element -> internalTypes.add(element.getQualifiedName()));
+
+        Set<String> packageNames = new LinkedHashSet<>();
+        projectModel.getFiles().forEach(file -> addPackageHierarchy(packageNames, file.getPackageName()));
+        projectModel.getElements().forEach(element -> addPackageHierarchy(packageNames, element.getPackageName()));
+
+        Map<String, ExternalTypeModel> externalTypes = new LinkedHashMap<>();
+        for (RelationshipModel relationship : projectModel.getRelationships()) {
+            if (shouldCollectExternalTypeFrom(relationship)) {
+                collectExternalType(relationship.getTarget(), internalTypes, externalTypes);
+            }
+        }
+
+        collectExternalTypesFromAnnotationsAndBodies(projectModel, internalTypes, externalTypes);
+
+        externalTypes.values().forEach(externalType -> addPackageHierarchy(packageNames, externalType.getPackageName()));
+
+        projectModel.setPackages(packageNames.stream()
+                .map(this::createPackageModel)
+                .toList());
+        projectModel.setExternalTypes(new ArrayList<>(externalTypes.values()));
+    }
+
+    private void collectExternalType(String rawType, Set<String> internalTypes, Map<String, ExternalTypeModel> externalTypes) {
+        String normalized = extractTypeOwner(rawType);
+        if (normalized == null || normalized.isBlank() || isPrimitiveOrVoid(normalized) || internalTypes.contains(normalized)) {
+            return;
+        }
+
+        String raw = extractRawType(normalized);
+        if (raw == null || raw.isBlank() || isPrimitiveOrVoid(raw) || internalTypes.contains(raw)) {
+            return;
+        }
+
+        raw = qualifyKnownExternalType(raw);
+
+        if (!raw.contains(".")) {
+            return;
+        }
+
+        if (internalTypes.contains(raw)) {
+            return;
+        }
+
+        ExternalTypeModel externalType = externalTypes.computeIfAbsent(raw, typeName -> {
+            int idx = typeName.lastIndexOf('.');
+            String packageName = idx >= 0 ? typeName.substring(0, idx) : "";
+            String simpleName = idx >= 0 ? typeName.substring(idx + 1) : typeName;
+            return new ExternalTypeModel(simpleName, typeName, packageName, guessExternalKind(typeName));
+        });
+
+        // Type arguments are intentionally not stored in externalTypes because they are
+        // use-site information. They remain in resolvedTypeArguments at fields,
+        // parameters, return types, and local variables. We only recurse over them
+        // so their base external types are registered as separate externalTypes.
+        extractTypeArguments(normalized).forEach(typeArgument ->
+                collectExternalType(typeArgument, internalTypes, externalTypes)
+        );
+    }
+
+    private boolean shouldCollectExternalTypeFrom(RelationshipModel relationship) {
+        if (relationship == null || relationship.getType() == null) {
+            return false;
+        }
+        return Set.of("imports", "uses_type", "calls", "creates", "throws", "extends", "implements")
+                .contains(relationship.getType());
+    }
+
+    private String extractTypeOwner(String text) {
+        if (text == null) {
+            return null;
+        }
+        String value = text.trim();
+        if (value.contains("(")) {
+            int paren = value.indexOf('(');
+            String beforeParen = value.substring(0, paren);
+            int lastDot = beforeParen.lastIndexOf('.');
+            if (lastDot > 0) {
+                return beforeParen.substring(0, lastDot);
+            }
+        }
+        if (value.endsWith(".<init>")) {
+            return value.substring(0, value.length() - ".<init>".length());
+        }
+        if (value.contains(".<init>")) {
+            return value.substring(0, value.indexOf(".<init>"));
+        }
+        return value;
+    }
+
+    private void addPackageHierarchy(Set<String> packageNames, String packageName) {
+        if (packageName == null || packageName.isBlank()) {
+            return;
+        }
+        String[] parts = packageName.split("\\.");
+        StringBuilder current = new StringBuilder();
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (!current.isEmpty()) {
+                current.append('.');
+            }
+            current.append(part);
+            packageNames.add(current.toString());
+        }
+    }
+
+    private PackageModel createPackageModel(String qualifiedName) {
+        int idx = qualifiedName.lastIndexOf('.');
+        String name = idx >= 0 ? qualifiedName.substring(idx + 1) : qualifiedName;
+        String parent = idx >= 0 ? qualifiedName.substring(0, idx) : null;
+        return new PackageModel(name, qualifiedName, parent);
+    }
+
+
+    private void collectExternalTypesFromAnnotationsAndBodies(
+            ProjectModel projectModel,
+            Set<String> internalTypes,
+            Map<String, ExternalTypeModel> externalTypes
+    ) {
+        Set<String> internalSimpleNames = new LinkedHashSet<>();
+        projectModel.getElements().forEach(element -> internalSimpleNames.add(element.getName()));
+
+        for (TypeModel element : projectModel.getElements()) {
+            collectAnnotationExternalTypes(element.getAnnotations(), internalTypes, internalSimpleNames, externalTypes);
+
+            element.getFields().forEach(field ->
+                    collectAnnotationExternalTypes(field.getAnnotations(), internalTypes, internalSimpleNames, externalTypes)
+            );
+
+            for (MethodModel method : element.getMethods()) {
+                collectAnnotationExternalTypes(method.getAnnotations(), internalTypes, internalSimpleNames, externalTypes);
+                method.getParameters().forEach(parameter ->
+                        collectAnnotationExternalTypes(parameter.getAnnotations(), internalTypes, internalSimpleNames, externalTypes)
+                );
+                collectExternalTypesFromStatements(method.getBody(), internalTypes, externalTypes);
+            }
+        }
+    }
+
+    private void collectAnnotationExternalTypes(
+            List<String> annotations,
+            Set<String> internalTypes,
+            Set<String> internalSimpleNames,
+            Map<String, ExternalTypeModel> externalTypes
+    ) {
+        if (annotations == null) {
+            return;
+        }
+
+        for (String annotation : annotations) {
+            String annotationName = extractAnnotationName(annotation);
+            if (annotationName == null || annotationName.isBlank()) {
+                continue;
+            }
+            String rawAnnotation = annotationName.contains(".")
+                    ? annotationName
+                    : qualifyKnownExternalType(annotationName);
+
+            if (rawAnnotation == null || rawAnnotation.isBlank()) {
+                continue;
+            }
+            if (!rawAnnotation.contains(".") && internalSimpleNames.contains(rawAnnotation)) {
+                continue;
+            }
+            if (internalTypes.contains(rawAnnotation)) {
+                continue;
+            }
+            collectExternalType(rawAnnotation, internalTypes, externalTypes);
+        }
+    }
+
+    private String extractAnnotationName(String annotation) {
+        if (annotation == null) {
+            return null;
+        }
+        String value = annotation.trim();
+        if (value.startsWith("@")) {
+            value = value.substring(1);
+        }
+        int paren = value.indexOf('(');
+        if (paren >= 0) {
+            value = value.substring(0, paren);
+        }
+        int space = value.indexOf(' ');
+        if (space >= 0) {
+            value = value.substring(0, space);
+        }
+        return value.trim();
+    }
+
+    private void collectExternalTypesFromStatements(
+            List<BodyStatementModel> statements,
+            Set<String> internalTypes,
+            Map<String, ExternalTypeModel> externalTypes
+    ) {
+        if (statements == null) {
+            return;
+        }
+
+        for (BodyStatementModel statement : statements) {
+            collectExternalType(statement.getExceptionType(), internalTypes, externalTypes);
+            collectExternalType(statement.getClassName(), internalTypes, externalTypes);
+            collectExternalTypesFromStatements(statement.getBody(), internalTypes, externalTypes);
+            collectExternalTypesFromStatements(statement.getElseBody(), internalTypes, externalTypes);
+            collectExternalTypesFromStatements(statement.getCatchClauses(), internalTypes, externalTypes);
+            collectExternalTypesFromStatements(statement.getFinallyBody(), internalTypes, externalTypes);
+        }
+    }
+
+    private String qualifyKnownExternalType(String rawType) {
+        if (rawType == null) {
+            return null;
+        }
+        String value = rawType.trim();
+        if (value.contains(".")) {
+            return value;
+        }
+        return switch (value) {
+            case "Deprecated" -> "java.lang.Deprecated";
+            case "RuntimeException" -> "java.lang.RuntimeException";
+            case "IllegalArgumentException" -> "java.lang.IllegalArgumentException";
+            case "IllegalStateException" -> "java.lang.IllegalStateException";
+            case "String" -> "java.lang.String";
+            case "Long" -> "java.lang.Long";
+            case "StringBuilder" -> "java.lang.StringBuilder";
+            case "Retention" -> "java.lang.annotation.Retention";
+            case "RetentionPolicy" -> "java.lang.annotation.RetentionPolicy";
+            default -> value;
+        };
+    }
+
+    private String guessExternalKind(String qualifiedName) {
+        if (qualifiedName == null) {
+            return "class";
+        }
+        if (qualifiedName.equals("java.lang.annotation.RetentionPolicy")) {
+            return "enum";
+        }
+        if (qualifiedName.equals("java.lang.Deprecated")) {
+            return "annotation";
+        }
+        if (qualifiedName.equals("java.util.List")
+                || qualifiedName.equals("java.util.Map")
+                || qualifiedName.equals("java.util.Collection")
+                || qualifiedName.equals("java.lang.CharSequence")
+                || qualifiedName.equals("java.lang.Comparable")
+                || qualifiedName.equals("java.io.Serializable")
+                || qualifiedName.startsWith("java.lang.annotation.")) {
+            return "interface";
+        }
+        return "class";
+    }
+
+    private boolean isPrimitiveOrVoid(String typeName) {
+        return Set.of("void", "boolean", "byte", "short", "int", "long", "float", "double", "char").contains(typeName);
+    }
+
+    private String extractRawType(String typeName) {
+        if (typeName == null) {
+            return null;
+        }
+        String value = typeName.trim();
+        int genericStart = value.indexOf('<');
+        if (genericStart >= 0) {
+            return value.substring(0, genericStart).trim();
+        }
+        return value;
+    }
+
+    private List<String> extractTypeArguments(String typeName) {
+        if (typeName == null) {
+            return new ArrayList<>();
+        }
+        int start = typeName.indexOf('<');
+        int end = typeName.lastIndexOf('>');
+        if (start < 0 || end < start) {
+            return new ArrayList<>();
+        }
+        String arguments = typeName.substring(start + 1, end);
+        List<String> result = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int depth = 0;
+        for (int i = 0; i < arguments.length(); i++) {
+            char c = arguments.charAt(i);
+            if (c == '<') {
+                depth++;
+                current.append(c);
+            } else if (c == '>') {
+                depth--;
+                current.append(c);
+            } else if (c == ',' && depth == 0) {
+                result.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        if (!current.toString().trim().isBlank()) {
+            result.add(current.toString().trim());
+        }
+        return result;
     }
 
     private String buildSignature(String methodName, List<ParameterModel> parameters) {

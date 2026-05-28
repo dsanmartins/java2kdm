@@ -8,10 +8,13 @@ public class ParameterModel {
     private String name;
     private String type;
     private String resolvedType;
+    private String resolvedRawType;
+    private List<String> resolvedTypeArguments = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
+    private Integer lineStart;
+    private Integer lineEnd;
 
-    public ParameterModel() {
-    }
+    public ParameterModel() { }
 
     public ParameterModel(String name, String type) {
         this.name = name;
@@ -31,35 +34,27 @@ public class ParameterModel {
         this.annotations = annotations != null ? annotations : new ArrayList<>();
     }
 
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public String getType() {
-        return type;
-    }
+    public String getResolvedType() { return resolvedType; }
+    public void setResolvedType(String resolvedType) { this.resolvedType = resolvedType; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public String getResolvedRawType() { return resolvedRawType; }
+    public void setResolvedRawType(String resolvedRawType) { this.resolvedRawType = resolvedRawType; }
 
-    public String getResolvedType() {
-        return resolvedType;
-    }
+    public List<String> getResolvedTypeArguments() { return resolvedTypeArguments; }
+    public void setResolvedTypeArguments(List<String> resolvedTypeArguments) { this.resolvedTypeArguments = resolvedTypeArguments != null ? resolvedTypeArguments : new ArrayList<>(); }
 
-    public void setResolvedType(String resolvedType) {
-        this.resolvedType = resolvedType;
-    }
+    public List<String> getAnnotations() { return annotations; }
+    public void setAnnotations(List<String> annotations) { this.annotations = annotations != null ? annotations : new ArrayList<>(); }
 
-    public List<String> getAnnotations() {
-        return annotations;
-    }
+    public Integer getLineStart() { return lineStart; }
+    public void setLineStart(Integer lineStart) { this.lineStart = lineStart; }
 
-    public void setAnnotations(List<String> annotations) {
-        this.annotations = annotations != null ? annotations : new ArrayList<>();
-    }
+    public Integer getLineEnd() { return lineEnd; }
+    public void setLineEnd(Integer lineEnd) { this.lineEnd = lineEnd; }
 }

@@ -11,109 +11,65 @@ public class MethodModel {
     private String signature;
     private String qualifiedSignature;
     private String resolvedReturnType;
+    private String resolvedRawReturnType;
+    private List<String> resolvedReturnTypeArguments = new ArrayList<>();
+    private Integer lineStart;
+    private Integer lineEnd;
 
     private List<String> modifiers = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
     private List<ParameterModel> parameters = new ArrayList<>();
     private List<CallModel> calls = new ArrayList<>();
-    public List<CallModel> getCalls() {
-        return calls;
-    }
     private List<LocalVariableModel> localVariables = new ArrayList<>();
     private List<BodyStatementModel> body = new ArrayList<>();
 
-    public MethodModel() {
-    }
+    public MethodModel() { }
 
-    public List<LocalVariableModel> getLocalVariables() {
-        return localVariables;
-    }
+    public List<CallModel> getCalls() { return calls; }
+    public void setCalls(List<CallModel> calls) { this.calls = calls; }
 
-    public void setLocalVariables(List<LocalVariableModel> localVariables) {
-        this.localVariables = localVariables;
-    }
+    public List<LocalVariableModel> getLocalVariables() { return localVariables; }
+    public void setLocalVariables(List<LocalVariableModel> localVariables) { this.localVariables = localVariables; }
 
-    public List<BodyStatementModel> getBody() {
-        return body;
-    }
+    public List<BodyStatementModel> getBody() { return body; }
+    public void setBody(List<BodyStatementModel> body) { this.body = body; }
 
-    public void setBody(List<BodyStatementModel> body) {
-        this.body = body;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setCalls(List<CallModel> calls) {
-        this.calls = calls;
-    }
+    public String getReturnType() { return returnType; }
+    public void setReturnType(String returnType) { this.returnType = returnType; }
 
-    public String getName() {
-        return name;
-    }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = kind; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getSignature() { return signature; }
+    public void setSignature(String signature) { this.signature = signature; }
 
-    public String getReturnType() {
-        return returnType;
-    }
+    public List<String> getModifiers() { return modifiers; }
+    public void setModifiers(List<String> modifiers) { this.modifiers = modifiers; }
 
-    public void setReturnType(String returnType) {
-        this.returnType = returnType;
-    }
+    public List<String> getAnnotations() { return annotations; }
+    public void setAnnotations(List<String> annotations) { this.annotations = annotations; }
 
-    public String getKind() {
-        return kind;
-    }
+    public List<ParameterModel> getParameters() { return parameters; }
+    public void setParameters(List<ParameterModel> parameters) { this.parameters = parameters; }
 
-    public void setKind(String kind) {
-        this.kind = kind;
-    }
+    public String getQualifiedSignature() { return qualifiedSignature; }
+    public void setQualifiedSignature(String qualifiedSignature) { this.qualifiedSignature = qualifiedSignature; }
 
-    public String getSignature() {
-        return signature;
-    }
+    public String getResolvedReturnType() { return resolvedReturnType; }
+    public void setResolvedReturnType(String resolvedReturnType) { this.resolvedReturnType = resolvedReturnType; }
 
-    public void setSignature(String signature) {
-        this.signature = signature;
-    }
+    public String getResolvedRawReturnType() { return resolvedRawReturnType; }
+    public void setResolvedRawReturnType(String resolvedRawReturnType) { this.resolvedRawReturnType = resolvedRawReturnType; }
 
-    public List<String> getModifiers() {
-        return modifiers;
-    }
+    public List<String> getResolvedReturnTypeArguments() { return resolvedReturnTypeArguments; }
+    public void setResolvedReturnTypeArguments(List<String> resolvedReturnTypeArguments) { this.resolvedReturnTypeArguments = resolvedReturnTypeArguments != null ? resolvedReturnTypeArguments : new ArrayList<>(); }
 
-    public void setModifiers(List<String> modifiers) {
-        this.modifiers = modifiers;
-    }
+    public Integer getLineStart() { return lineStart; }
+    public void setLineStart(Integer lineStart) { this.lineStart = lineStart; }
 
-    public List<String> getAnnotations() {
-        return annotations;
-    }
-
-    public void setAnnotations(List<String> annotations) {
-        this.annotations = annotations;
-    }
-
-    public List<ParameterModel> getParameters() {
-        return parameters;
-    }
-
-    public void setParameters(List<ParameterModel> parameters) {
-        this.parameters = parameters;
-    }
-
-    public String getQualifiedSignature() {
-        return qualifiedSignature;
-    }
-
-    public void setQualifiedSignature(String qualifiedSignature) {
-        this.qualifiedSignature = qualifiedSignature;
-    }
-
-    public String getResolvedReturnType() {
-        return resolvedReturnType;
-    }
-
-    public void setResolvedReturnType(String resolvedReturnType) {
-        this.resolvedReturnType = resolvedReturnType;
-    }
+    public Integer getLineEnd() { return lineEnd; }
+    public void setLineEnd(Integer lineEnd) { this.lineEnd = lineEnd; }
 }

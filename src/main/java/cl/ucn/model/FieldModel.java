@@ -10,52 +10,42 @@ public class FieldModel {
     private List<String> modifiers = new ArrayList<>();
     private List<String> annotations = new ArrayList<>();
     private String resolvedType;
+    private String resolvedRawType;
+    private List<String> resolvedTypeArguments = new ArrayList<>();
+    private Integer lineStart;
+    private Integer lineEnd;
 
-    public FieldModel() {
-    }
+    public FieldModel() { }
 
     public FieldModel(String name, String type) {
         this.name = name;
         this.type = type;
     }
 
-    public String getResolvedType() {
-        return resolvedType;
-    }
+    public String getResolvedType() { return resolvedType; }
+    public void setResolvedType(String resolvedType) { this.resolvedType = resolvedType; }
 
-    public void setResolvedType(String resolvedType) {
-        this.resolvedType = resolvedType;
-    }
+    public String getResolvedRawType() { return resolvedRawType; }
+    public void setResolvedRawType(String resolvedRawType) { this.resolvedRawType = resolvedRawType; }
 
-    public String getName() {
-        return name;
-    }
+    public List<String> getResolvedTypeArguments() { return resolvedTypeArguments; }
+    public void setResolvedTypeArguments(List<String> resolvedTypeArguments) { this.resolvedTypeArguments = resolvedTypeArguments != null ? resolvedTypeArguments : new ArrayList<>(); }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public Integer getLineStart() { return lineStart; }
+    public void setLineStart(Integer lineStart) { this.lineStart = lineStart; }
 
-    public String getType() {
-        return type;
-    }
+    public Integer getLineEnd() { return lineEnd; }
+    public void setLineEnd(Integer lineEnd) { this.lineEnd = lineEnd; }
 
-    public void setType(String type) {
-        this.type = type;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public List<String> getModifiers() {
-        return modifiers;
-    }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
-    public void setModifiers(List<String> modifiers) {
-        this.modifiers = modifiers;
-    }
+    public List<String> getModifiers() { return modifiers; }
+    public void setModifiers(List<String> modifiers) { this.modifiers = modifiers; }
 
-    public List<String> getAnnotations() {
-        return annotations;
-    }
-
-    public void setAnnotations(List<String> annotations) {
-        this.annotations = annotations;
-    }
+    public List<String> getAnnotations() { return annotations; }
+    public void setAnnotations(List<String> annotations) { this.annotations = annotations; }
 }
